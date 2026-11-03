@@ -1,0 +1,8 @@
+package com.example.moneybug.exception;
+
+public class NotFoundException extends RuntimeException {
+
+    public NotFoundException(String message) {
+        super(message);
+    }
+}

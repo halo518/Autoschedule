@@ -1,9 +1,9 @@
 package com.example.moneybug.dto;
 
 import com.example.moneybug.entity.Store;
-import com.example.moneybug.entity.User;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -17,23 +17,19 @@ public class StoreDto {
     @Setter
     @NoArgsConstructor
     public static class Request {
-        @NotNull
-        private Long employerId;
-
         @NotBlank
         @Size(max = 100)
-        private String storeName;
+        private String name;
 
-        private boolean underFive = true;
+        @Size(max = 100)
+        private String branch;
 
-        /** 연관 엔티티(고용주)는 서비스에서 조회해 넘겨준다. */
-        public Store toEntity(User employer) {
-            Store store = new Store();
-            store.setEmployer(employer);
-            store.setStoreName(storeName);
-            store.setUnderFive(underFive);
-            return store;
-        }
+        @NotNull
+        private Store.Scale scale;
+
+        @NotNull
+        @Positive
+        private Integer minimumWage;
     }
 
     @Getter
@@ -41,17 +37,19 @@ public class StoreDto {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class Response {
-        private Integer id;
-        private Long employerId;
-        private String storeName;
-        private boolean underFive;
+        private Long id;
+        private String name;
+        private String branch;
+        private Store.Scale scale;
+        private Integer minimumWage;
 
         public static Response from(Store store) {
             return Response.builder()
                     .id(store.getId())
-                    .employerId(store.getEmployer().getId())
-                    .storeName(store.getStoreName())
-                    .underFive(store.isUnderFive())
+                    .name(store.getName())
+                    .branch(store.getBranch())
+                    .scale(store.getScale())
+                    .minimumWage(store.getMinimumWage())
                     .build();
         }
     }

@@ -6,24 +6,32 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "store")
+@Table(name = "stores")
 @Getter
 @Setter
 @NoArgsConstructor
 public class Store {
 
+    public enum Scale { UNDER_5, OVER_5 }
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "store_id")
-    private Integer id;
+    private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "employer_id", nullable = false)
-    private User employer;
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
 
-    @Column(name = "store_name", nullable = false, length = 100)
-    private String storeName;
+    @Column(nullable = false, length = 100)
+    private String name;
 
-    @Column(name = "is_under_5", nullable = false)
-    private boolean underFive = true;
+    @Column(length = 100)
+    private String branch;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private Scale scale;
+
+    @Column(name = "minimum_wage", nullable = false)
+    private Integer minimumWage;
 }

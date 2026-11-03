@@ -19,7 +19,7 @@ public class StoreWorkerDto {
     @NoArgsConstructor
     public static class Request {
         @NotNull
-        private Integer storeId;
+        private Long storeId;
 
         @NotNull
         private Long workerId;
@@ -51,7 +51,7 @@ public class StoreWorkerDto {
     @AllArgsConstructor
     public static class Response {
         private Integer id;
-        private Integer storeId;
+        private Long storeId;
         private Long workerId;
         private Integer hourlyWage;
         private StoreWorker.TaxType taxType;

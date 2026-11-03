@@ -19,7 +19,7 @@ public class NoticeDto {
     @NoArgsConstructor
     public static class Request {
         @NotNull
-        private Integer storeId;
+        private Long storeId;
 
         @NotBlank
         private String content;
@@ -39,7 +39,7 @@ public class NoticeDto {
     @AllArgsConstructor
     public static class Response {
         private Integer id;
-        private Integer storeId;
+        private Long storeId;
         private String content;
         private LocalDateTime createdAt;
 
