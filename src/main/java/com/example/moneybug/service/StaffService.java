@@ -36,13 +36,16 @@ public class StaffService {
     private final WorkerRepository workerRepository;
     private final WorkerAvailabilityRepository availabilityRepository;
     private final PartRepository partRepository;
+    private final StoreService storeService;
 
     public StaffService(StoreRepository storeRepository, WorkerRepository workerRepository,
-                        WorkerAvailabilityRepository availabilityRepository, PartRepository partRepository) {
+                        WorkerAvailabilityRepository availabilityRepository, PartRepository partRepository,
+                        StoreService storeService) {
         this.storeRepository = storeRepository;
         this.workerRepository = workerRepository;
         this.availabilityRepository = availabilityRepository;
         this.partRepository = partRepository;
+        this.storeService = storeService;
     }
 
     /** 매장이 아직 없으면 빈 목록을 돌려준다. */
@@ -63,8 +66,8 @@ public class StaffService {
 
     @Transactional
     public StaffDto.Response create(Long userId, StaffDto.Request request) {
-        Store store = storeRepository.findFirstByUserIdOrderById(userId)
-                .orElseThrow(() -> new NotFoundException("Store not found"));
+        // 매장 설정을 열기 전에 직원부터 등록해도 되도록, 매장이 없으면 기본 매장을 만든다.
+        Store store = storeService.ensureStore(userId);
         Worker worker = new Worker();
         worker.setStore(store);
         return write(store, worker, request);
@@ -86,7 +89,7 @@ public class StaffService {
 
     private Worker owned(Long userId, Long workerId) {
         return workerRepository.findByIdAndStoreUserId(workerId, userId)
-                .orElseThrow(() -> new NotFoundException("Staff not found"));
+                .orElseThrow(() -> new NotFoundException("구성원을 찾을 수 없습니다."));
     }
 
     private StaffDto.Response write(Store store, Worker worker, StaffDto.Request r) {
@@ -104,7 +107,7 @@ public class StaffService {
         Integer max = null;
         if (partTime && r.preferredWeeklyHours() != null) {
             if (r.preferredWeeklyHours().size() != 2 || r.preferredWeeklyHours().get(0) > r.preferredWeeklyHours().get(1)) {
-                throw new BadRequestException("preferredWeeklyHours must be [min, max]");
+                throw new BadRequestException("희망 근무시간은 최소와 최대 순서로 입력해 주세요.");
             }
             min = r.preferredWeeklyHours().get(0);
             max = r.preferredWeeklyHours().get(1);
@@ -129,7 +132,7 @@ public class StaffService {
             return rows;
         }
         if (availableParts.size() > DAYS) {
-            throw new BadRequestException("availableParts must have at most 7 days");
+            throw new BadRequestException("가능 파트는 요일별 7개까지 입력할 수 있습니다.");
         }
         Map<Long, Part> parts = partRepository.findByStoreIdOrderByStartTime(store.getId()).stream()
                 .collect(Collectors.toMap(Part::getId, Function.identity()));
@@ -142,7 +145,7 @@ public class StaffService {
             for (String id : ids) {
                 Part part = parts.get(parseId(id));
                 if (part == null) {
-                    throw new BadRequestException("Unknown part: " + id);
+                    throw new BadRequestException("존재하지 않는 파트입니다: " + id);
                 }
                 if (seen.add(part.getId())) {
                     WorkerAvailability row = new WorkerAvailability();
@@ -163,7 +166,7 @@ public class StaffService {
             return rows;
         }
         if (workHours.size() > DAYS) {
-            throw new BadRequestException("workHours must have at most 7 days");
+            throw new BadRequestException("고정 근무는 요일별 7개까지 입력할 수 있습니다.");
         }
         for (int day = 0; day < workHours.size(); day++) {
             StaffDto.WorkTime time = workHours.get(day);
@@ -208,7 +211,7 @@ public class StaffService {
         try {
             return Long.valueOf(id);
         } catch (NumberFormatException e) {
-            throw new BadRequestException("Invalid part id: " + id);
+            throw new BadRequestException("파트 id가 올바르지 않습니다: " + id);
         }
     }
 

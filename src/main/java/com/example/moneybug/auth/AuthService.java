@@ -24,6 +24,8 @@ public class AuthService {
 
     public record Tokens(String accessToken, String refreshToken, String tokenType, long expiresIn) {}
 
+    public record LoginResult(UserDto.Response user, Tokens tokens) {}
+
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final UserRepository userRepository;
@@ -43,7 +45,7 @@ public class AuthService {
     }
 
     @Transactional
-    public UserDto.Response signup(UserDto.SignupRequest request) {
+    public LoginResult signup(UserDto.SignupRequest request) {
         String email = request.getEmail().trim().toLowerCase();
         if (userRepository.existsByEmail(email)) {
             throw new EmailAlreadyExistsException();
@@ -53,7 +55,8 @@ public class AuthService {
         user.setEmail(email);
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
         try {
-            return UserDto.Response.from(userRepository.saveAndFlush(user));
+            User saved = userRepository.saveAndFlush(user);
+            return new LoginResult(UserDto.Response.from(saved), issue(saved.getId()));
         } catch (DataIntegrityViolationException e) {
             // 동시 가입으로 existsByEmail 검사를 통과한 경우 (unique 제약)
             throw new EmailAlreadyExistsException();
@@ -61,23 +64,23 @@ public class AuthService {
     }
 
     @Transactional
-    public Tokens login(UserDto.LoginRequest request) {
+    public LoginResult login(UserDto.LoginRequest request) {
         User user = userRepository.findByEmail(request.getEmail().trim().toLowerCase())
-                .orElseThrow(() -> new AuthException("Invalid email or password"));
+                .orElseThrow(() -> new AuthException("이메일 또는 비밀번호가 맞지 않습니다."));
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
-            throw new AuthException("Invalid email or password");
+            throw new AuthException("이메일 또는 비밀번호가 맞지 않습니다.");
         }
-        return issue(user.getId());
+        return new LoginResult(UserDto.Response.from(user), issue(user.getId()));
     }
 
     /** Rotates the refresh token: the presented one is consumed and a new pair is issued. */
     @Transactional(noRollbackFor = AuthException.class)
     public Tokens refresh(String refreshToken) {
         RefreshToken stored = refreshTokenRepository.findByTokenHash(hash(refreshToken))
-                .orElseThrow(() -> new AuthException("Invalid refresh token"));
+                .orElseThrow(() -> new AuthException("다시 로그인해 주세요."));
         refreshTokenRepository.delete(stored);
         if (stored.isExpired()) {
-            throw new AuthException("Refresh token expired");
+            throw new AuthException("다시 로그인해 주세요.");
         }
         return issue(stored.getUserId());
     }

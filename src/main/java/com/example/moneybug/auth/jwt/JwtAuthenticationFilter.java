@@ -1,7 +1,9 @@
 package com.example.moneybug.auth.jwt;
 
+import com.example.moneybug.auth.AuthCookies;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpHeaders;
@@ -25,12 +27,28 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
-        String header = request.getHeader(HttpHeaders.AUTHORIZATION);
-        if (header != null && header.startsWith(BEARER)) {
-            jwtProvider.parseUserId(header.substring(BEARER.length()))
+        String token = resolveToken(request);
+        if (token != null) {
+            jwtProvider.parseUserId(token)
                     .ifPresent(userId -> SecurityContextHolder.getContext().setAuthentication(
                             new UsernamePasswordAuthenticationToken(userId, null, List.of())));
         }
         chain.doFilter(request, response);
+    }
+
+    /** 브라우저는 쿠키, API 도구(curl 등)는 Authorization 헤더로 보낸다. */
+    private static String resolveToken(HttpServletRequest request) {
+        String header = request.getHeader(HttpHeaders.AUTHORIZATION);
+        if (header != null && header.startsWith(BEARER)) {
+            return header.substring(BEARER.length());
+        }
+        if (request.getCookies() != null) {
+            for (Cookie cookie : request.getCookies()) {
+                if (AuthCookies.ACCESS.equals(cookie.getName())) {
+                    return cookie.getValue();
+                }
+            }
+        }
+        return null;
     }
 }
