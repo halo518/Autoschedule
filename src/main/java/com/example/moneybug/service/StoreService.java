@@ -12,6 +12,7 @@ import com.example.moneybug.repository.StoreDemandRepository;
 import com.example.moneybug.repository.StoreHoursRepository;
 import com.example.moneybug.repository.StoreRepository;
 import com.example.moneybug.repository.UserRepository;
+import com.example.moneybug.util.TimeCodec;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -76,7 +77,9 @@ public class StoreService {
         store.setMinimumWage(r.minimumWage());
         storeRepository.save(store);
 
-        replaceHours(store, time(r.open()), time(r.close()), time(r.weekendOpen()), time(r.weekendClose()));
+        LocalTime open = TimeCodec.start(r.open());
+        LocalTime weekendOpen = TimeCodec.start(r.weekendOpen());
+        replaceHours(store, open, TimeCodec.end(open, r.close()), weekendOpen, TimeCodec.end(weekendOpen, r.weekendClose()));
         reconcileParts(store, r.parts());
         replaceDemand(store, r.demand());
         return toResponse(store);
@@ -115,9 +118,10 @@ public class StoreService {
                 part = new Part();
                 part.setStore(store);
             }
+            LocalTime start = TimeCodec.start(item.start());
             part.setName(item.name().trim());
-            part.setStartTime(time(item.start()));
-            part.setEndTime(time(item.end()));
+            part.setStartTime(start);
+            part.setEndTime(TimeCodec.end(start, item.end()));
             part.setBreakMinutes(item.breakMinutes() == null ? DEFAULT_BREAK_MINUTES : item.breakMinutes());
             keep.add(partRepository.save(part).getId());
         }
@@ -130,6 +134,8 @@ public class StoreService {
         storeDemandRepository.flush();
         List<StoreDemand> rows = new ArrayList<>();
         for (StoreDto.DemandItem item : items) {
+            LocalTime start = TimeCodec.start(item.start());
+            LocalTime end = TimeCodec.end(start, item.end());
             List<Integer> days = item.days() == null || item.days().isEmpty()
                     ? java.util.stream.IntStream.range(0, DAYS).boxed().toList()
                     : item.days().stream().distinct().sorted().toList();
@@ -137,8 +143,8 @@ public class StoreService {
                 StoreDemand demand = new StoreDemand();
                 demand.setStore(store);
                 demand.setDayOfWeek(Weekday.values()[day]);
-                demand.setStartTime(time(item.start()));
-                demand.setEndTime(time(item.end()));
+                demand.setStartTime(start);
+                demand.setEndTime(end);
                 demand.setRequiredCount(item.required());
                 rows.add(demand);
             }
@@ -182,7 +188,8 @@ public class StoreService {
         for (int i = 0; i < parts.size(); i++) {
             Part p = parts.get(i);
             partItems.add(new StoreDto.PartItem(String.valueOf(p.getId()), p.getName(), tone(i, parts.size()),
-                    p.getStartTime().toString(), p.getEndTime().toString(), p.getBreakMinutes()));
+                    TimeCodec.formatStart(p.getStartTime()), TimeCodec.formatEnd(p.getStartTime(), p.getEndTime()),
+                    p.getBreakMinutes()));
         }
 
         return new StoreDto.Response(store.getId(), store.getName(), store.getBranch() == null ? "" : store.getBranch(),
@@ -207,7 +214,8 @@ public class StoreService {
         return grouped.values().stream().map(group -> {
             StoreDemand first = group.get(0);
             List<Integer> days = group.stream().map(g -> g.getDayOfWeek().ordinal()).toList();
-            return new StoreDto.DemandItem(first.getStartTime().toString(), first.getEndTime().toString(),
+            return new StoreDto.DemandItem(TimeCodec.formatStart(first.getStartTime()),
+                    TimeCodec.formatEnd(first.getStartTime(), first.getEndTime()),
                     first.getRequiredCount(), days.size() == DAYS ? null : days);
         }).toList();
     }
@@ -223,15 +231,11 @@ public class StoreService {
     }
 
     private static String open(StoreHours h) {
-        return h == null ? "09:00" : h.getOpenTime().toString();
+        return h == null ? "09:00" : TimeCodec.formatStart(h.getOpenTime());
     }
 
     private static String close(StoreHours h) {
-        return h == null ? "22:00" : h.getCloseTime().toString();
-    }
-
-    private static LocalTime time(String hhmm) {
-        return LocalTime.parse(hhmm);
+        return h == null ? "22:00" : TimeCodec.formatEnd(h.getOpenTime(), h.getCloseTime());
     }
 
     /** 숫자가 아니면(새 파트의 임시 id 포함) null → 새 파트로 취급한다. */

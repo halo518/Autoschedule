@@ -12,6 +12,7 @@ import com.example.moneybug.repository.PartRepository;
 import com.example.moneybug.repository.StoreRepository;
 import com.example.moneybug.repository.WorkerAvailabilityRepository;
 import com.example.moneybug.repository.WorkerRepository;
+import com.example.moneybug.util.TimeCodec;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -176,8 +177,9 @@ public class StaffService {
             WorkerAvailability row = new WorkerAvailability();
             row.setWorker(worker);
             row.setDayOfWeek(Weekday.values()[day]);
-            row.setStartTime(LocalTime.parse(time.start()));
-            row.setEndTime(LocalTime.parse(time.end()));
+            LocalTime start = TimeCodec.start(time.start());
+            row.setStartTime(start);
+            row.setEndTime(TimeCodec.end(start, time.end()));
             rows.add(row);
         }
         return rows;
@@ -197,7 +199,8 @@ public class StaffService {
                 if (workHours == null) {
                     workHours = new ArrayList<>(java.util.Collections.nCopies(DAYS, null));
                 }
-                workHours.set(day, new StaffDto.WorkTime(row.getStartTime().toString(), row.getEndTime().toString()));
+                workHours.set(day, new StaffDto.WorkTime(TimeCodec.formatStart(row.getStartTime()),
+                        TimeCodec.formatEnd(row.getStartTime(), row.getEndTime())));
             }
         }
         List<Integer> preferred = w.getMinWeeklyHours() != null && w.getMaxWeeklyHours() != null

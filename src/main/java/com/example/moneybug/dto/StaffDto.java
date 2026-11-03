@@ -18,8 +18,8 @@ import java.util.List;
 public class StaffDto {
 
     public record WorkTime(
-            @NotNull @Pattern(regexp = "^([01]\\d|2[0-3]):[0-5]\\d$") String start,
-            @NotNull @Pattern(regexp = "^([01]\\d|2[0-3]):[0-5]\\d$") String end) {}
+            @NotNull @Pattern(regexp = StoreDto.START) String start,
+            @NotNull @Pattern(regexp = StoreDto.END) String end) {}
 
     public record Request(
             @NotBlank @Size(max = 50) String name,
