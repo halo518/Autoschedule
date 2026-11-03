@@ -18,7 +18,7 @@ public class StoreDto {
     @NoArgsConstructor
     public static class Request {
         @NotNull
-        private Integer employerId;
+        private Long employerId;
 
         @NotBlank
         @Size(max = 100)
@@ -42,7 +42,7 @@ public class StoreDto {
     @AllArgsConstructor
     public static class Response {
         private Integer id;
-        private Integer employerId;
+        private Long employerId;
         private String storeName;
         private boolean underFive;
 

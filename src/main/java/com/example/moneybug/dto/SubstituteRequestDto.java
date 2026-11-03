@@ -20,7 +20,7 @@ public class SubstituteRequestDto {
         private Integer scheduleId;
 
         @NotNull
-        private Integer requesterId;
+        private Long requesterId;
 
         private String reason;
 
@@ -41,8 +41,8 @@ public class SubstituteRequestDto {
     public static class Response {
         private Integer id;
         private Integer scheduleId;
-        private Integer requesterId;
-        private Integer takerId;
+        private Long requesterId;
+        private Long takerId;
         private String reason;
         private SubstituteRequest.Status status;
 

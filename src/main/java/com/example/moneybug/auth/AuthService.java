@@ -1,11 +1,12 @@
 package com.example.moneybug.auth;
 
 import com.example.moneybug.auth.jwt.JwtProvider;
-import com.example.moneybug.auth.kakao.KakaoClient;
-import com.example.moneybug.auth.kakao.KakaoClient.KakaoUser;
-import com.example.moneybug.entity.User; // [수정] user 패키지 삭제 -> entity 패키지로 변경
-import com.example.moneybug.repository.UserRepository; // [수정] user 패키지 삭제 -> repository 패키지로 변경
+import com.example.moneybug.dto.UserDto;
+import com.example.moneybug.entity.User;
+import com.example.moneybug.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,34 +26,48 @@ public class AuthService {
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
-    private final KakaoClient kakaoClient;
     private final UserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final JwtProvider jwtProvider;
+    private final PasswordEncoder passwordEncoder;
     private final Duration refreshTtl;
 
-    public AuthService(KakaoClient kakaoClient, UserRepository userRepository,
-                       RefreshTokenRepository refreshTokenRepository, JwtProvider jwtProvider,
+    public AuthService(UserRepository userRepository, RefreshTokenRepository refreshTokenRepository,
+                       JwtProvider jwtProvider, PasswordEncoder passwordEncoder,
                        @Value("${jwt.refresh-ttl-seconds}") long refreshTtlSeconds) {
-        this.kakaoClient = kakaoClient;
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.jwtProvider = jwtProvider;
+        this.passwordEncoder = passwordEncoder;
         this.refreshTtl = Duration.ofSeconds(refreshTtlSeconds);
     }
 
-    /** Mobile: the app already holds a Kakao access token from the Kakao SDK. */
     @Transactional
-    public Tokens loginWithKakaoAccessToken(String kakaoAccessToken) {
-        kakaoClient.verifyAppId(kakaoAccessToken);
-        return login(kakaoClient.fetchUser(kakaoAccessToken));
+    public UserDto.Response signup(UserDto.SignupRequest request) {
+        String email = request.getEmail().trim().toLowerCase();
+        if (userRepository.existsByEmail(email)) {
+            throw new EmailAlreadyExistsException();
+        }
+        User user = new User();
+        user.setName(request.getName().trim());
+        user.setEmail(email);
+        user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
+        try {
+            return UserDto.Response.from(userRepository.saveAndFlush(user));
+        } catch (DataIntegrityViolationException e) {
+            // 동시 가입으로 existsByEmail 검사를 통과한 경우 (unique 제약)
+            throw new EmailAlreadyExistsException();
+        }
     }
 
-    /** Web: the browser came back from Kakao with an authorization code. */
     @Transactional
-    public Tokens loginWithKakaoCode(String code) {
-        String kakaoAccessToken = kakaoClient.exchangeCode(code);
-        return login(kakaoClient.fetchUser(kakaoAccessToken));
+    public Tokens login(UserDto.LoginRequest request) {
+        User user = userRepository.findByEmail(request.getEmail().trim().toLowerCase())
+                .orElseThrow(() -> new AuthException("Invalid email or password"));
+        if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
+            throw new AuthException("Invalid email or password");
+        }
+        return issue(user.getId());
     }
 
     /** Rotates the refresh token: the presented one is consumed and a new pair is issued. */
@@ -70,30 +85,6 @@ public class AuthService {
     @Transactional
     public void logout(String refreshToken) {
         refreshTokenRepository.deleteByTokenHash(hash(refreshToken));
-    }
-
-    private Tokens login(KakaoUser kakaoUser) {
-        String kakaoId = String.valueOf(kakaoUser.kakaoId());
-        // [수정] 신규 가입 시 role/name/contact 는 임시값으로 채우고, 이후 사용자가 직접 입력해 갱신한다.
-        // 기존 사용자의 정보는 덮어쓰지 않는다.
-        User user = userRepository.findByKakaoId(kakaoId)
-                .orElseGet(() -> {
-                    User created = new User();
-                    created.setKakaoId(kakaoId);
-                    created.setRole(User.Role.WORKER);
-                    created.setName(tempName(kakaoUser.nickname()));
-                    created.setContact("");
-                    return created;
-                });
-        return issue(userRepository.save(user).getId().longValue());
-    }
-
-    // [수정] name 은 NOT NULL, VARCHAR(50) 이므로 닉네임이 없거나 길면 보정한다.
-    private static String tempName(String nickname) {
-        if (nickname == null || nickname.isBlank()) {
-            return "";
-        }
-        return nickname.length() > 50 ? nickname.substring(0, 50) : nickname;
     }
 
     private Tokens issue(Long userId) {

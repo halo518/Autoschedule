@@ -22,7 +22,7 @@ public class StoreWorkerDto {
         private Integer storeId;
 
         @NotNull
-        private Integer workerId;
+        private Long workerId;
 
         @NotNull
         @Positive
@@ -52,7 +52,7 @@ public class StoreWorkerDto {
     public static class Response {
         private Integer id;
         private Integer storeId;
-        private Integer workerId;
+        private Long workerId;
         private Integer hourlyWage;
         private StoreWorker.TaxType taxType;
         private String status;
