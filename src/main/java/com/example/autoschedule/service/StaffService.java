@@ -33,6 +33,8 @@ import java.util.stream.Collectors;
 public class StaffService {
 
     private static final int DAYS = Weekday.values().length;
+    private static final int MAX_WEEKLY_HOURS_OVER_5 = 52;
+    private static final int HOURS_PER_WEEK = 24 * 7;
 
     private final StoreRepository storeRepository;
     private final WorkerRepository workerRepository;
@@ -109,6 +111,7 @@ public class StaffService {
         }
         worker.setMinWeeklyHours(min);
         worker.setMaxWeeklyHours(max);
+        validateWeeklyHours(store, worker);
 
         List<WorkerAvailability> rows = partTime
                 ? partRows(store, worker, r.availableParts())
@@ -117,6 +120,22 @@ public class StaffService {
         worker.getAvailability().addAll(rows);
         workerRepository.saveAndFlush(worker);
         return toResponse(worker, rows);
+    }
+
+    /**
+     * 주 근로시간 상한. 5인 이상 사업장은 1주 40시간 + 연장 12시간 = 52시간을 넘길 수 없고(근로기준법 제50조·제53조),
+     * 5인 미만은 이 한도가 적용되지 않지만 일주일(168시간)을 넘는 값은 입력할 수 없다.
+     * 시급이 최저임금 미만인 경우는 막지 않는다(경고는 화면에서 보여준다).
+     */
+    private static void validateWeeklyHours(Store store, Worker worker) {
+        int limit = store.getScale() == Store.Scale.OVER_5 ? MAX_WEEKLY_HOURS_OVER_5 : HOURS_PER_WEEK;
+        for (Integer hours : new Integer[]{worker.getContractWeeklyHours(), worker.getMaxWeeklyHours()}) {
+            if (hours != null && hours > limit) {
+                throw ApiException.badRequest(store.getScale() == Store.Scale.OVER_5
+                        ? "5인 이상 사업장은 주 52시간을 넘길 수 없습니다."
+                        : "주 근로시간은 168시간을 넘길 수 없습니다.");
+            }
+        }
     }
 
     /** 알바생: 요일별 가능 파트 id 목록 → (요일, 파트) 한 줄씩. */
