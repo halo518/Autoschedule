@@ -25,7 +25,8 @@ import java.util.*;
 public class GeminiClient implements ScheduleAiClient {
 
     private static final String BASE = "https://generativelanguage.googleapis.com/v1beta/models/";
-    private static final Set<Integer> RETRYABLE = Set.of(429, 500, 503, 504);
+    /** 이 상태면 다음 모델로 넘어간다. 404 는 구글이 내린(또는 이 키로 못 쓰는) 모델이라 건너뛰어야 한다. */
+    private static final Set<Integer> RETRYABLE = Set.of(404, 429, 500, 503, 504);
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     record Response(List<Candidate> candidates) {}
