@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-MoneyBug is a Spring Boot 4.1.1 web app (Java 17 toolchain, Gradle, group `com.example`). It is currently a bare scaffold: only `MoneyBugApplication` and a context-load test exist under `com.example.moneybug`. Not a git repository.
+MoneyBug is a Spring Boot 4.1.1 web app (Java 17 toolchain, Gradle, group `com.example`). All code lives under `com.example.autoschedule` (entry point `AutoscheduleApplication`): `auth/` (email login, JWT), `controller`/`service`/`repository`/`entity`/`dto`, `ai/` (Gemini schedule generation). The DB schema is `src/main/resources/schema.sql` (tables `users`, `stores`, `store_hours`, `store_demand`, `parts`, `workers`, `worker_availability`, `templates`, `schedules`, `shifts`).
 
 Stack: Spring Data JPA (Hibernate) + Spring Web MVC (`spring-boot-starter-webmvc`) + MySQL (`mysql-connector-j`) + Lombok (annotation processor is configured for both main and test).
 
@@ -28,10 +28,17 @@ No lint/formatter is configured.
 
 ## Auth architecture
 
-Kakao login for web and mobile converges in `auth/AuthService`: get a Kakao access token -> `KakaoClient.fetchUser` -> upsert `user/User` by `kakaoId` -> issue our own JWT access token (`auth/jwt/JwtProvider`, stateless `SecurityConfig` + `JwtAuthenticationFilter`) and an opaque refresh token (only its SHA-256 is stored in `RefreshToken`; rotated on `/api/auth/refresh`).
-- Mobile: `POST /api/auth/kakao/token` with the Kakao SDK access token.
-- Web: `GET /api/auth/kakao/login` -> Kakao -> `GET /api/auth/kakao/callback` (state kept in an HttpOnly cookie).
+Email + password login. `POST /api/auth/signup` and `/login` return `{id, name, email}` and set two HttpOnly cookies (`SameSite=Lax`): `access_token` (JWT, `jwt.access-ttl-seconds`) and `refresh_token` (opaque, only its SHA-256 is stored in `RefreshToken`, rotated on `POST /api/auth/refresh`). `POST /api/auth/logout` revokes the refresh token and clears both cookies. Signup logs the user in immediately.
+- `auth/jwt/JwtAuthenticationFilter` reads the JWT from the `access_token` cookie, or from an `Authorization: Bearer` header (for curl/API tools), and sets the user id (`Long`) as the principal. Controllers take it with `@AuthenticationPrincipal Long userId`.
+- Passwords are stored as BCrypt hashes (`users.password_hash`). Auth failures are `AuthException` (401); everything else uses `ApiException`.
+- Error bodies are plain Korean text (the frontend shows `res.text()` as-is), see `exception/ApiExceptionHandler` and `ValidationExceptionHandler`.
 
-Required env vars: `JWT_SECRET` (>= 32 bytes; the app won't start without it), `KAKAO_REST_API_KEY`, `KAKAO_CLIENT_SECRET`, `KAKAO_REDIRECT_URI`, optional `KAKAO_APP_ID` (rejects mobile tokens from other Kakao apps). `@SpringBootTest` tests therefore also need `JWT_SECRET` set. jjwt uses the `orgjson` serializer on purpose (Boot 4 ships Jackson 3).
+Required env vars: `JWT_SECRET` (>= 32 bytes; the app won't start without it) and `SPRING_DATASOURCE_PASSWORD` if your MySQL password is not the one in `application.properties`. Optional: `COOKIE_SECURE=true` behind HTTPS, `GEMINI_API_KEY` for AI generation. `@SpringBootTest` tests need `JWT_SECRET` too. jjwt uses the `orgjson` serializer on purpose (Boot 4 ships Jackson 3).
+
+## Store / staff API (frontend shape)
+
+`GET/PUT /api/stores/me` exchange the frontend `Store` as one object (hours, parts, demand included); `GET` creates a default store for a new user. `GET/POST /api/staff`, `PUT/DELETE /api/staff/{id}` exchange the frontend `Staff`. The service unpacks them into `stores`/`store_hours`/`parts`/`store_demand` and `workers`/`worker_availability`. Weekday arrays are 0=Mon..6=Sun.
+
+Times: end times beyond 24:00 are sent as `26:00` (02:00 next day), see `util/TimeCodec`. The DB stores clock time (`02:00`); an end time that is earlier than or equal to the start means the next day. Part `tone` has no column, so it is derived from the start-time order. Note `service/Minutes` (schedule logic) only treats `00:00` as 24:00, so stores that close after 24:00 are not handled by the schedule validation yet.
 
 The comments in `application.properties` are Korean and appear mojibake'd (`?`) in the file; preserve the file's encoding when editing it.
