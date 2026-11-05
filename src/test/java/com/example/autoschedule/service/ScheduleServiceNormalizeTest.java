@@ -2,6 +2,7 @@ package com.example.autoschedule.service;
 
 import com.example.autoschedule.dto.ScheduleDto.ShiftBody;
 import com.example.autoschedule.entity.Part;
+import com.example.autoschedule.entity.Schedule;
 import com.example.autoschedule.entity.Shift;
 import com.example.autoschedule.entity.Worker;
 import com.example.autoschedule.exception.ApiException;
@@ -66,5 +67,14 @@ class ScheduleServiceNormalizeTest {
 
         assertThatThrownBy(() -> ScheduleService.normalize(body(null, null),
                 worker(Worker.EmploymentType.PART_TIME), null)).isInstanceOf(ApiException.class);
+    }
+
+    @Test
+    void confirmedScheduleIsReadOnly() {
+        Schedule s = new Schedule();
+        s.setStatus(Schedule.Status.DRAFT);
+        ScheduleService.requireDraft(s);
+        s.setStatus(Schedule.Status.CONFIRMED);
+        assertThatThrownBy(() -> ScheduleService.requireDraft(s)).isInstanceOf(ApiException.class);
     }
 }
