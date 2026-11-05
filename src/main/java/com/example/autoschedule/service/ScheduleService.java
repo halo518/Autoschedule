@@ -58,7 +58,8 @@ public class ScheduleService {
     /** 직접 만들기. 같은 달 DRAFT 는 지우고 새로 만든다(CONFIRMED 는 유지). */
     @Transactional
     public ScheduleDto.Response create(Long userId, ScheduleDto.CreateRequest req) {
-        Store store = myStore(userId);
+        Store store = storeRepository.findWithLockByUserId(userId)
+                .orElseThrow(() -> ApiException.notFound("매장 정보를 찾을 수 없습니다."));
         YearMonth ym = YearMonth.from(req.getPeriodStart());
         discardDrafts(store.getId(), ym);
 

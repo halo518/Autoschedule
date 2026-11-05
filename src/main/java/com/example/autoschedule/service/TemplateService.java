@@ -88,7 +88,8 @@ public class TemplateService {
      */
     @Transactional
     public ScheduleDto.Response applyToMonth(Long userId, Long templateId, TemplateDto.ApplyRequest req) {
-        Store store = myStore(userId);
+        Store store = storeRepository.findWithLockByUserId(userId)
+                .orElseThrow(() -> ApiException.notFound("매장 정보를 찾을 수 없습니다."));
         Template template = ownedTemplate(store, templateId);
         Body body = readBody(template);
         YearMonth month = YearMonth.from(req.getPeriodStart());

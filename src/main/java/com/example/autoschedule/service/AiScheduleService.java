@@ -109,7 +109,7 @@ public class AiScheduleService {
     // ---------------------------------------------------------------- 4단계: DRAFT 저장
 
     private ScheduleDto.Response save(Long userId, AiContext ctx, AiSchedulePipeline.Result result) {
-        Store store = storeRepository.findByUserId(userId)
+        Store store = storeRepository.findWithLockByUserId(userId)
                 .orElseThrow(() -> ApiException.notFound("매장 정보를 찾을 수 없습니다."));
         if (!store.getId().equals(ctx.storeId())) throw ApiException.conflict("매장 정보가 변경되었습니다. 다시 시도하세요.");
 
