@@ -1,6 +1,6 @@
 -- 데이터베이스 생성 및 선택 (한글 깨짐 방지 설정 포함)
-CREATE DATABASE IF NOT EXISTS moneybug DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE moneybug;
+CREATE DATABASE IF NOT EXISTS autoschedule DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE autoschedule;
 
 -- 1. 사용자 테이블
 CREATE TABLE IF NOT EXISTS user (
