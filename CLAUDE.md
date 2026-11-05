@@ -22,7 +22,7 @@ No lint/formatter is configured.
 
 On Linux/macOS use `./gradlew`. `settings.gradle` applies the foojay toolchain resolver, so Gradle downloads JDK 17 if it is not installed.
 
-Docker: `cp .env.example .env`, fill in `DB_PASSWORD` and `JWT_SECRET`, then `docker compose up -d --build`. The stack is MySQL 8.4 (volume `db-data`) plus the app on port `APP_PORT` (default 8080).
+Docker: `cp .env.example .env`, fill in `DB_ROOT_PASSWORD`, `DB_PASSWORD` and `JWT_SECRET`, then `docker compose up -d --build`. The stack is MySQL 8.4 (volume `db-data`; the app connects as user `autoschedule`, created only when the volume is empty) plus the app on port `APP_PORT` (default 8080).
 
 ## Runtime configuration
 

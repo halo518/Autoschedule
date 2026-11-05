@@ -3,8 +3,11 @@ services:
     image: mysql:8.4
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD in .env}
       MYSQL_DATABASE: autoschedule
+      # app account with rights on the autoschedule DB only (created on first start of an empty volume)
+      MYSQL_USER: autoschedule
+      MYSQL_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
       TZ: Asia/Seoul
     command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
     volumes:
@@ -25,7 +28,7 @@ services:
       - "${APP_PORT:-8080}:8080"
     environment:
       SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/autoschedule?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
-      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_USERNAME: autoschedule
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env (32+ bytes)}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
