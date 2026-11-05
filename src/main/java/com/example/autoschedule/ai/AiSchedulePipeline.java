@@ -191,7 +191,7 @@ public class AiSchedulePipeline {
                 start = part.startMin();
                 end = part.endMin();
             }
-            if (end <= start) {
+            if (end <= start || end - start >= Minutes.DAY) {
                 violations.add(tag + ": 퇴근 시각이 출근 시각보다 늦어야 합니다.");
                 continue;
             }

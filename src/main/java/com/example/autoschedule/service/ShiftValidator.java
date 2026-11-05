@@ -11,7 +11,7 @@ import java.util.stream.Collectors;
 /**
  * 근무 블록 하드 제약.
  * <ol>
- *   <li>같은 사람의 근무끼리 시간이 겹치지 않는다. 연차/휴무인 날에는 근무가 없다.</li>
+ *   <li>같은 사람의 근무끼리 시간이 겹치지 않는다(자정을 넘는 근무와 다음 날 근무 포함). 연차/휴무인 날에는 근무가 없다.</li>
  *   <li>연소자(만 18세 미만): 22:00 이후 근무 불가, 1일 7시간(실근로) 초과 불가, 주 35시간 초과 불가.</li>
  * </ol>
  * 주 35시간은 이 근무표(한 달) 안의 월~일 합계만 본다.
@@ -50,6 +50,7 @@ public final class ShiftValidator {
         Map<LocalDate, List<WorkBlock>> byDate = list.stream()
                 .collect(Collectors.groupingBy(WorkBlock::date, TreeMap::new, Collectors.toList()));
         byDate.forEach((date, day) -> collectDay(date, day, out));
+        collectOverlaps(list, out);
 
         WorkBlock any = list.get(0);
         if (any.minor()) {
@@ -69,6 +70,35 @@ public final class ShiftValidator {
         }
     }
 
+    /** 날짜를 넘어 이어지는 근무까지 보려고 근무일 + 분을 절대 분으로 바꿔 비교한다. */
+    private static void collectOverlaps(List<WorkBlock> list, List<Violation> out) {
+        List<WorkBlock> timed = list.stream().filter(b -> b.isWorking() && b.hasTime())
+                .sorted(Comparator.comparingLong(ShiftValidator::absStart)).toList();
+        long maxEnd = Long.MIN_VALUE;
+        WorkBlock prev = null;
+        for (WorkBlock b : timed) {
+            if (prev != null && absStart(b) < maxEnd) {
+                out.add(new Violation(HttpStatus.CONFLICT,
+                        b.workerName() + "님의 " + b.date() + " 근무(" + Minutes.format(b.startMin()) + "~"
+                                + Minutes.format(b.endMin()) + ")가 " + prev.date() + " 근무("
+                                + Minutes.format(prev.startMin()) + "~" + Minutes.format(prev.endMin()) + ")와 겹칩니다.",
+                        List.of(b.id())));
+            }
+            if (absEnd(b) > maxEnd) {
+                maxEnd = absEnd(b);
+                prev = b;
+            }
+        }
+    }
+
+    private static long absStart(WorkBlock b) {
+        return b.date().toEpochDay() * Minutes.DAY + b.startMin();
+    }
+
+    private static long absEnd(WorkBlock b) {
+        return b.date().toEpochDay() * Minutes.DAY + b.endMin();
+    }
+
     private static void collectDay(LocalDate date, List<WorkBlock> day, List<Violation> out) {
         List<WorkBlock> working = day.stream().filter(WorkBlock::isWorking).toList();
         String name = day.get(0).workerName();
@@ -79,23 +109,7 @@ public final class ShiftValidator {
                     working.stream().map(WorkBlock::id).toList()));
         }
 
-        List<WorkBlock> timed = working.stream().filter(WorkBlock::hasTime)
-                .sorted(Comparator.comparingInt(WorkBlock::startMin)).toList();
-        int maxEnd = Integer.MIN_VALUE;
-        WorkBlock prev = null;
-        for (WorkBlock b : timed) {
-            if (prev != null && b.startMin() < maxEnd) {
-                out.add(new Violation(HttpStatus.CONFLICT,
-                        name + "님의 " + date + " 근무(" + Minutes.format(b.startMin()) + "~" + Minutes.format(b.endMin())
-                                + ")가 다른 근무(" + Minutes.format(prev.startMin()) + "~" + Minutes.format(prev.endMin())
-                                + ")와 겹칩니다.", List.of(b.id())));
-            }
-            if (b.endMin() > maxEnd) {
-                maxEnd = b.endMin();
-                prev = b;
-            }
-        }
-
+        List<WorkBlock> timed = working.stream().filter(WorkBlock::hasTime).toList();
         if (day.get(0).minor()) {
             for (WorkBlock b : timed) {
                 if (b.endMin() > MINOR_LAST_END) {

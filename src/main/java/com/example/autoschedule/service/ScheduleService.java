@@ -239,7 +239,7 @@ public class ScheduleService {
         int startMin = Minutes.ofStart(start);
         int endMin = Minutes.ofEnd(start, end);
         int span = endMin - startMin;
-        if (span <= 0) throw ApiException.badRequest("퇴근 시각은 출근 시각보다 늦어야 합니다.");
+        if (span >= Minutes.DAY) throw ApiException.badRequest("퇴근 시각은 출근 시각과 달라야 합니다.");
         if (b.getBreakMinutes() < 0) throw ApiException.badRequest("휴게시간은 0분 이상이어야 합니다.");
 
         int breakMin = BreakCalculator.resolve(span, b.getBreakMinutes(), part == null ? null : part.getBreakMinutes());
@@ -249,6 +249,7 @@ public class ScheduleService {
         try {
             LocalTime bs = TimeText.parse(b.getBreakStart());
             preferred = bs == null ? null : Minutes.ofStart(bs);
+            if (preferred != null && preferred < startMin) preferred += Minutes.DAY; // 자정 넘은 휴게
         } catch (DateTimeParseException e) {
             throw ApiException.badRequest("휴게 시작 시각 형식이 올바르지 않습니다. (HH:MM)");
         }

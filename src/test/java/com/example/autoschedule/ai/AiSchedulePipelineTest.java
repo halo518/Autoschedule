@@ -48,6 +48,19 @@ class AiSchedulePipelineTest {
     }
 
     @Test
+    void overnightPartFitsOvernightStoreHours() {
+        StaffInfo staff = new StaffInfo(1, "a", false, false, 10_000, null, null, null, null,
+                Map.of(Weekday.MON, List.of(8L)), Map.of());
+        AiContext c = new AiContext(1L, Store.Scale.UNDER_5, YearMonth.of(2026, 11), Map.of(1L, staff),
+                Map.of(8L, new PartInfo(8, "night", 1320, 1560, 0)),
+                Map.of(Weekday.MON, new AiContext.DayHours(600, 1560)), List.of(),
+                Schedule.WeeklyHolidayPay.ALLOW, Schedule.Priority.FAIRNESS, false);
+        var r = pipeline(new FakeClient(VALID.replace("\"7\"", "\"8\""))).run(c);
+        assertThat(r.lines()).extracting(AiSchedulePipeline.AcceptedLine::endMin).containsExactly(1560);
+        assertThat(r.removedCount()).isZero();
+    }
+
+    @Test
     void validFirstReply() {
         var r = pipeline(new FakeClient(VALID)).run(ctx());
         assertThat(r.lines()).hasSize(1);

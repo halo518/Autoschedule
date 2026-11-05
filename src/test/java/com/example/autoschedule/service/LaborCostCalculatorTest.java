@@ -50,4 +50,10 @@ class LaborCostCalculatorTest {
         assertThat(calc(true, List.of(block(MON, 540, 1140, 0))).overtimePremium()).isEqualTo(10_000); // 2h over 8h
         assertThat(calc(false, List.of(block(MON, 540, 1140, 0))).overtimePremium()).isZero();
     }
+
+    @Test
+    void overnightNightPremiumCountsAfterMidnight() {
+        // 21:00~27:00 = 6h, night 22:00~27:00 = 5h
+        assertThat(calc(true, List.of(block(MON, 1260, 1620, 0))).nightPremium()).isEqualTo(25_000);
+    }
 }

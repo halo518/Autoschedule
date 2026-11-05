@@ -41,6 +41,17 @@ class ShiftValidatorTest {
     }
 
     @Test
+    void overnightShiftOverlapsNextDay() {
+        var v = ShiftValidator.collect(List.of(
+                work("a", 1, false, MON, 1320, 1560, 0), // 22:00~26:00
+                work("b", 1, false, MON.plusDays(1), 60, 300, 0))); // 01:00~05:00
+        assertThat(v).extracting(ShiftValidator.Violation::blockIds).containsExactly(List.of("b"));
+        assertThat(ShiftValidator.collect(List.of(
+                work("a", 1, false, MON, 1320, 1560, 0),
+                work("b", 1, false, MON.plusDays(1), 120, 300, 0)))).isEmpty();
+    }
+
+    @Test
     void workOnLeaveDayIsConflict() {
         var v = ShiftValidator.collect(List.of(leave("l", 1, MON), work("a", 1, false, MON, 540, 720, 0)));
         assertThat(v).extracting(ShiftValidator.Violation::status).containsExactly(HttpStatus.CONFLICT);

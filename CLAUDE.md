@@ -15,8 +15,8 @@ Use the Gradle wrapper (on Windows PowerShell: `.\gradlew.bat`):
 - Run app: `.\gradlew.bat bootRun`
 - Build: `.\gradlew.bat build`
 - All tests: `.\gradlew.bat test`
-- Single test class: `.\gradlew.bat test --tests "com.example.autoschedule.AutoscheduleApplicationTests"`
-- Single test method: `.\gradlew.bat test --tests "com.example.autoschedule.AutoscheduleApplicationTests.methodName"`
+- Single test class: `.\gradlew.bat test --tests "com.example.autoschedule.service.ShiftValidatorTest"`
+- Single test method: `.\gradlew.bat test --tests "com.example.autoschedule.service.ShiftValidatorTest.methodName"`
 
 No lint/formatter is configured.
 
@@ -55,6 +55,6 @@ Required env vars: `JWT_SECRET` (>= 32 bytes; the app won't start without it) an
 
 `GET/PUT /api/stores/me` exchange the frontend `Store` as one object (hours, parts, demand included); `GET` creates a default store for a new user. `GET/POST /api/staff`, `PUT/DELETE /api/staff/{id}` exchange the frontend `Staff`. The service unpacks them into `stores`/`store_hours`/`parts`/`store_demand` and `workers`/`worker_availability`. Weekday arrays are 0=Mon..6=Sun.
 
-Times: end times beyond 24:00 are sent as `26:00` (02:00 next day), see `util/TimeCodec`. The DB stores clock time (`02:00`); an end time that is earlier than or equal to the start means the next day. Part `tone` has no column, so it is derived from the start-time order. Note `service/Minutes` (schedule logic) only treats `00:00` as 24:00, so stores that close after 24:00 are not handled by the schedule validation yet.
+Times: end times beyond 24:00 are sent as `26:00` (02:00 next day), see `util/TimeCodec`. The DB stores clock time (`02:00`); an end time that is earlier than or equal to the start means the next day. Part `tone` has no column, so it is derived from the start-time order. Schedule logic (`service/Minutes`, `dto/TimeText`) uses the same rule: shift ends past midnight are sent as `26:00`, stored as `02:00`, and handled as minutes >= 1440. `ShiftValidator` checks overlaps across days, and night premium counts the hours after midnight.
 
 The comments in `application.properties` are Korean and appear mojibake'd (`?`) in the file; preserve the file's encoding when editing it.

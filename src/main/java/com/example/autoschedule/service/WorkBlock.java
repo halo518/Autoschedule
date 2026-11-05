@@ -4,7 +4,7 @@ import com.example.autoschedule.entity.Shift;
 
 import java.time.LocalDate;
 
-/** 검증용 근무 블록. JPA 와 무관한 값 객체라 단독으로 테스트할 수 있다. 시각은 자정 기준 분(종료 24:00 = 1440). */
+/** 검증용 근무 블록. JPA 와 무관한 값 객체라 단독으로 테스트할 수 있다. 시각은 근무일 자정 기준 분(자정을 넘는 종료는 1440 이상). */
 public record WorkBlock(String id, Long workerId, String workerName, boolean minor, LocalDate date,
                         Integer startMin, Integer endMin, int breakMinutes, Shift.Status status) {
 

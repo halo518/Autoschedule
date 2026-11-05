@@ -35,6 +35,18 @@ class ScheduleServiceNormalizeTest {
     }
 
     @Test
+    void overnightShiftIsStoredAsClockTime() {
+        Shift s = ScheduleService.normalize(body("22:00", "26:00"), worker(Worker.EmploymentType.FULL_TIME), null);
+        assertThat(s.getEndTime()).isEqualTo(LocalTime.of(2, 0));
+        assertThat(WorkBlock.of(s).endMin()).isEqualTo(1560);
+        assertThat(s.getBreakMinutes()).isEqualTo(30);
+        assertThat(com.example.autoschedule.dto.TimeText.formatEnd(s.getStartTime(), s.getEndTime())).isEqualTo("26:00");
+
+        assertThatThrownBy(() -> ScheduleService.normalize(body("09:00", "09:00"),
+                worker(Worker.EmploymentType.FULL_TIME), null)).isInstanceOf(ApiException.class);
+    }
+
+    @Test
     void fullTimeNeedsQuarterHours() {
         assertThatThrownBy(() -> ScheduleService.normalize(body("09:10", "18:00"),
                 worker(Worker.EmploymentType.FULL_TIME), null)).isInstanceOf(ApiException.class);
