@@ -58,7 +58,8 @@ public class ScheduleService {
     /** 직접 만들기. 같은 달 DRAFT 는 지우고 새로 만든다(CONFIRMED 는 유지). */
     @Transactional
     public ScheduleDto.Response create(Long userId, ScheduleDto.CreateRequest req) {
-        Store store = myStore(userId);
+        Store store = storeRepository.findWithLockByUserId(userId)
+                .orElseThrow(() -> ApiException.notFound("매장 정보를 찾을 수 없습니다."));
         YearMonth ym = YearMonth.from(req.getPeriodStart());
         discardDrafts(store.getId(), ym);
 
@@ -94,7 +95,7 @@ public class ScheduleService {
      */
     @Transactional
     public ScheduleDto.Response saveAll(Long userId, Long scheduleId, ScheduleDto.SaveShiftsRequest req) {
-        Schedule schedule = ownedSchedule(userId, scheduleId);
+        Schedule schedule = editableSchedule(userId, scheduleId);
         Lookup lookup = lookup(schedule.getStore().getId());
 
         List<Shift> incoming = new ArrayList<>();
@@ -136,7 +137,7 @@ public class ScheduleService {
 
     @Transactional
     public ShiftBody addShift(Long userId, Long scheduleId, ShiftBody body) {
-        Schedule schedule = ownedSchedule(userId, scheduleId);
+        Schedule schedule = editableSchedule(userId, scheduleId);
         Lookup lookup = lookup(schedule.getStore().getId());
         Shift s = normalize(body, lookup.worker(body.getStaffId()), lookup.part(body.getPartId()));
         if (shiftRepository.existsById(s.getId())) throw ApiException.badRequest("이미 사용 중인 근무 ID입니다.");
@@ -149,7 +150,7 @@ public class ScheduleService {
 
     @Transactional
     public ShiftBody updateShift(Long userId, Long scheduleId, String shiftId, ShiftBody body) {
-        Schedule schedule = ownedSchedule(userId, scheduleId);
+        Schedule schedule = editableSchedule(userId, scheduleId);
         Shift target = findShift(schedule, shiftId);
         Lookup lookup = lookup(schedule.getStore().getId());
         body.setId(shiftId);
@@ -164,7 +165,7 @@ public class ScheduleService {
     /** 근무든 연차든 id 로 삭제한다(연차도 shifts 행). */
     @Transactional
     public void deleteShift(Long userId, Long scheduleId, String shiftId) {
-        Schedule schedule = ownedSchedule(userId, scheduleId);
+        Schedule schedule = editableSchedule(userId, scheduleId);
         Shift target = findShift(schedule, shiftId);
         schedule.getShifts().remove(target);
         touch(schedule);
@@ -173,7 +174,7 @@ public class ScheduleService {
     /** 연차 등록: 그 날짜 같은 사람의 기존 근무를 삭제하고 연차(유급 8h)를 넣는다. */
     @Transactional
     public LeaveBody addLeave(Long userId, Long scheduleId, LeaveBody body) {
-        Schedule schedule = ownedSchedule(userId, scheduleId);
+        Schedule schedule = editableSchedule(userId, scheduleId);
         Lookup lookup = lookup(schedule.getStore().getId());
         Shift leave = normalizeLeave(body, lookup.worker(body.getStaffId()));
         if (shiftRepository.existsById(leave.getId())) throw ApiException.badRequest("이미 사용 중인 근무 ID입니다.");
@@ -239,7 +240,7 @@ public class ScheduleService {
         int startMin = Minutes.ofStart(start);
         int endMin = Minutes.ofEnd(start, end);
         int span = endMin - startMin;
-        if (span <= 0) throw ApiException.badRequest("퇴근 시각은 출근 시각보다 늦어야 합니다.");
+        if (span >= Minutes.DAY) throw ApiException.badRequest("퇴근 시각은 출근 시각과 달라야 합니다.");
         if (b.getBreakMinutes() < 0) throw ApiException.badRequest("휴게시간은 0분 이상이어야 합니다.");
 
         int breakMin = BreakCalculator.resolve(span, b.getBreakMinutes(), part == null ? null : part.getBreakMinutes());
@@ -249,6 +250,7 @@ public class ScheduleService {
         try {
             LocalTime bs = TimeText.parse(b.getBreakStart());
             preferred = bs == null ? null : Minutes.ofStart(bs);
+            if (preferred != null && preferred < startMin) preferred += Minutes.DAY; // 자정 넘은 휴게
         } catch (DateTimeParseException e) {
             throw ApiException.badRequest("휴게 시작 시각 형식이 올바르지 않습니다. (HH:MM)");
         }
@@ -394,6 +396,19 @@ public class ScheduleService {
         Store store = myStore(userId);
         return scheduleRepository.findByIdAndStoreId(scheduleId, store.getId())
                 .orElseThrow(() -> ApiException.notFound("근무표를 찾을 수 없습니다."));
+    }
+
+    private Schedule editableSchedule(Long userId, Long scheduleId) {
+        Schedule schedule = ownedSchedule(userId, scheduleId);
+        requireDraft(schedule);
+        return schedule;
+    }
+
+    /** 확정된 근무표는 수정할 수 없다. */
+    static void requireDraft(Schedule schedule) {
+        if (schedule.getStatus() == Schedule.Status.CONFIRMED) {
+            throw ApiException.conflict("확정된 근무표는 수정할 수 없습니다.");
+        }
     }
 
     private static Shift findShift(Schedule schedule, String shiftId) {

@@ -15,20 +15,20 @@ Use the Gradle wrapper (on Windows PowerShell: `.\gradlew.bat`):
 - Run app: `.\gradlew.bat bootRun`
 - Build: `.\gradlew.bat build`
 - All tests: `.\gradlew.bat test`
-- Single test class: `.\gradlew.bat test --tests "com.example.autoschedule.AutoscheduleApplicationTests"`
-- Single test method: `.\gradlew.bat test --tests "com.example.autoschedule.AutoscheduleApplicationTests.methodName"`
+- Single test class: `.\gradlew.bat test --tests "com.example.autoschedule.service.ShiftValidatorTest"`
+- Single test method: `.\gradlew.bat test --tests "com.example.autoschedule.service.ShiftValidatorTest.methodName"`
 
 No lint/formatter is configured.
 
 On Linux/macOS use `./gradlew`. `settings.gradle` applies the foojay toolchain resolver, so Gradle downloads JDK 17 if it is not installed.
 
-Docker: `cp .env.example .env`, fill in `DB_PASSWORD` and `JWT_SECRET`, then `docker compose up -d --build`. The stack is MySQL 8.4 (volume `db-data`) plus the app on port `APP_PORT` (default 8080). Compose turns off SQL/bind-value logging.
+Docker: `cp .env.example .env`, fill in `DB_ROOT_PASSWORD`, `DB_PASSWORD` and `JWT_SECRET`, then `docker compose up -d --build`. The stack is MySQL 8.4 (volume `db-data`; the app connects as user `autoschedule`, created only when the volume is empty) plus the app on port `APP_PORT` (default 8080).
 
 ## Runtime configuration
 
 `src/main/resources/application.properties` points at a local MySQL: `jdbc:mysql://localhost:3306/autoschedule` (timezone `Asia/Seoul`, user `root`). A MySQL instance with an `autoschedule` database must be running, otherwise the app and the `@SpringBootTest` context-load test fail at startup (the test has no DB override or embedded DB).
 
-`spring.jpa.hibernate.ddl-auto=update` means entity classes drive the schema; there are no migration scripts. SQL logging is on (`show-sql`, `format_sql`).
+`spring.jpa.hibernate.ddl-auto=update` means entity classes drive the schema; there are no migration scripts. SQL logging (`show-sql`, `format_sql`, bound values at TRACE) is only on in the `dev` profile (`application-dev.properties`, enable with `SPRING_PROFILES_ACTIVE=dev`), because bound values include password and token hashes.
 
 ### Local DB setup
 
@@ -49,12 +49,12 @@ Email + password login. `POST /api/auth/signup` and `/login` return `{id, name, 
 - Passwords are stored as BCrypt hashes (`users.password_hash`). Auth failures are `AuthException` (401); everything else uses `ApiException`.
 - Error bodies are plain Korean text (the frontend shows `res.text()` as-is), see `exception/ApiExceptionHandler` and `ValidationExceptionHandler`.
 
-Required env vars: `JWT_SECRET` (>= 32 bytes; the app won't start without it) and `SPRING_DATASOURCE_PASSWORD` if your MySQL password is not the one in `application.properties`. Optional: `COOKIE_SECURE=true` behind HTTPS, `GEMINI_API_KEY` for AI generation. `@SpringBootTest` tests need `JWT_SECRET` too. jjwt uses the `orgjson` serializer on purpose (Boot 4 ships Jackson 3).
+Required env vars: `JWT_SECRET` (>= 32 bytes; the app won't start without it) and `SPRING_DATASOURCE_PASSWORD` if your MySQL password is not the one in `application.properties`. Optional: `COOKIE_SECURE=true` behind HTTPS, `GEMINI_API_KEY` for AI generation, `CORS_ALLOWED_ORIGINS` (comma separated) when the frontend runs on another origin of the same site (cookies are `SameSite=Lax`). `GET /actuator/health` is public (status only) and is used by the compose healthcheck. `@SpringBootTest` tests need `JWT_SECRET` too. jjwt uses the `orgjson` serializer on purpose (Boot 4 ships Jackson 3).
 
 ## Store / staff API (frontend shape)
 
 `GET/PUT /api/stores/me` exchange the frontend `Store` as one object (hours, parts, demand included); `GET` creates a default store for a new user. `GET/POST /api/staff`, `PUT/DELETE /api/staff/{id}` exchange the frontend `Staff`. The service unpacks them into `stores`/`store_hours`/`parts`/`store_demand` and `workers`/`worker_availability`. Weekday arrays are 0=Mon..6=Sun.
 
-Times: end times beyond 24:00 are sent as `26:00` (02:00 next day), see `util/TimeCodec`. The DB stores clock time (`02:00`); an end time that is earlier than or equal to the start means the next day. Part `tone` has no column, so it is derived from the start-time order. Note `service/Minutes` (schedule logic) only treats `00:00` as 24:00, so stores that close after 24:00 are not handled by the schedule validation yet.
+Times: end times beyond 24:00 are sent as `26:00` (02:00 next day), see `util/TimeCodec`. The DB stores clock time (`02:00`); an end time that is earlier than or equal to the start means the next day. Part `tone` has no column, so it is derived from the start-time order. Schedule logic (`service/Minutes`, `dto/TimeText`) uses the same rule: shift ends past midnight are sent as `26:00`, stored as `02:00`, and handled as minutes >= 1440. `ShiftValidator` checks overlaps across days, and night premium counts the hours after midnight.
 
 The comments in `application.properties` are Korean and appear mojibake'd (`?`) in the file; preserve the file's encoding when editing it.

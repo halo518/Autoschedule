@@ -11,6 +11,8 @@ import com.example.autoschedule.service.ShiftValidator;
 import com.example.autoschedule.service.WorkBlock;
 import com.example.autoschedule.dto.TimeText;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.json.JsonMapper;
@@ -18,10 +20,13 @@ import tools.jackson.databind.json.JsonMapper;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.*;
+import java.util.function.LongSupplier;
 
 /**
  * 2~3단계: Gemini 호출 → 파싱 → 규칙 검증 → (위반 시) 위반 사유를 붙여 최대 2회 재생성.
  * DB 를 모르는 순수 파이프라인이다. 마지막 시도에도 위반이 남으면 위반 줄을 버려 결과가 항상 하드 제약을 통과하도록 한다.
+ * 전체 시간 예산(gemini.total-budget-seconds)을 넘기면 추가 호출(보정·형식 재요청)을 하지 않는다.
+ * 이미 시작한 호출은 끊지 않으므로 최악의 경우는 예산 + 호출 1번(모델 폴백 포함)이다.
  */
 @Slf4j
 @Component
@@ -39,14 +44,24 @@ public class AiSchedulePipeline {
 
     private final ScheduleAiClient client;
     private final JsonMapper mapper;
+    private final long budgetMillis;
+    private final LongSupplier clock;
 
-    public AiSchedulePipeline(ScheduleAiClient client, JsonMapper mapper) {
+    @Autowired
+    public AiSchedulePipeline(ScheduleAiClient client, JsonMapper mapper,
+                              @Value("${gemini.total-budget-seconds:180}") long budgetSeconds) {
+        this(client, mapper, budgetSeconds * 1000, System::currentTimeMillis);
+    }
+
+    AiSchedulePipeline(ScheduleAiClient client, JsonMapper mapper, long budgetMillis, LongSupplier clock) {
         this.client = client;
         this.mapper = mapper;
+        this.budgetMillis = budgetMillis;
+        this.clock = clock;
     }
 
     public Result run(AiContext ctx) {
-        long t0 = System.currentTimeMillis();
+        long t0 = clock.getAsLong();
         String inputJson = mapper.writeValueAsString(AiPromptBuilder.buildInput(ctx));
         List<Turn> turns = new ArrayList<>();
         turns.add(Turn.user(AiPromptBuilder.userMessage(inputJson)));
@@ -54,7 +69,7 @@ public class AiSchedulePipeline {
         int calls = 0;
         int corrections = 0;
         while (true) {
-            Parsed parsed = callAndParse(turns);
+            Parsed parsed = callAndParse(turns, t0);
             calls += parsed.calls;
             AiOutput out = parsed.output;
 
@@ -68,15 +83,15 @@ public class AiSchedulePipeline {
 
             if (all.isEmpty()) {
                 log.info("AI schedule ok: promptVersion={} calls={} corrections={} ms={}",
-                        AiPromptBuilder.PROMPT_VERSION, calls, corrections, System.currentTimeMillis() - t0);
+                        AiPromptBuilder.PROMPT_VERSION, calls, corrections, clock.getAsLong() - t0);
                 return new Result(checked.lines, out.notes(), unfilled, 0, calls, corrections);
             }
-            if (corrections >= MAX_CORRECTIONS) {
+            if (corrections >= MAX_CORRECTIONS || overBudget(t0)) {
                 List<AcceptedLine> kept = new ArrayList<>(checked.lines);
                 int removed = dropUntilValid(ctx, kept);
                 log.warn("AI schedule still violating after {} corrections; dropped {} lines. promptVersion={} ms={}",
                         corrections, removed + checked.violations.size(), AiPromptBuilder.PROMPT_VERSION,
-                        System.currentTimeMillis() - t0);
+                        clock.getAsLong() - t0);
                 return new Result(kept, out.notes(), unfilled, removed + checked.violations.size(), calls, corrections);
             }
             log.info("AI schedule has {} violations; requesting correction {}", all.size(), corrections + 1);
@@ -90,10 +105,11 @@ public class AiSchedulePipeline {
 
     private record Parsed(AiOutput output, String raw, int calls) {}
 
-    private Parsed callAndParse(List<Turn> turns) {
+    private Parsed callAndParse(List<Turn> turns, long t0) {
         String raw = client.generate(AiPromptBuilder.SYSTEM_PROMPT, turns, AiPromptBuilder.responseSchema());
         AiOutput out = tryParse(raw);
         if (out != null) return new Parsed(out, raw, 1);
+        if (overBudget(t0)) throw new ApiException(HttpStatus.BAD_GATEWAY, "AI 응답을 해석하지 못했습니다. 다시 시도하세요.");
 
         List<Turn> retry = new ArrayList<>(turns);
         retry.add(Turn.model(raw));
@@ -102,6 +118,10 @@ public class AiSchedulePipeline {
         AiOutput out2 = tryParse(raw2);
         if (out2 == null) throw new ApiException(HttpStatus.BAD_GATEWAY, "AI 응답을 해석하지 못했습니다. 다시 시도하세요.");
         return new Parsed(out2, raw2, 2);
+    }
+
+    private boolean overBudget(long t0) {
+        return clock.getAsLong() - t0 >= budgetMillis;
     }
 
     private AiOutput tryParse(String raw) {
@@ -191,7 +211,7 @@ public class AiSchedulePipeline {
                 start = part.startMin();
                 end = part.endMin();
             }
-            if (end <= start) {
+            if (end <= start || end - start >= Minutes.DAY) {
                 violations.add(tag + ": 퇴근 시각이 출근 시각보다 늦어야 합니다.");
                 continue;
             }

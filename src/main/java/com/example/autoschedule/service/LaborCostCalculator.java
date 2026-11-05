@@ -67,9 +67,10 @@ public final class LaborCostCalculator {
             } else if ((s.getStatus() == Shift.Status.NORMAL || s.getStatus() == Shift.Status.TENTATIVE)
                     && s.getStartTime() != null && s.getEndTime() != null) {
                 int start = Minutes.ofStart(s.getStartTime());
+                Integer breakStart = s.getBreakStartTime() == null ? null : Minutes.ofStart(s.getBreakStartTime());
+                if (breakStart != null && breakStart < start) breakStart += Minutes.DAY; // 자정 넘은 휴게
                 out.add(new PayBlock(workerId, s.getWorkDate(), start, Minutes.ofEnd(s.getStartTime(), s.getEndTime()),
-                        s.getBreakMinutes() == null ? 0 : s.getBreakMinutes(),
-                        s.getBreakStartTime() == null ? null : Minutes.ofStart(s.getBreakStartTime()), false));
+                        s.getBreakMinutes() == null ? 0 : s.getBreakMinutes(), breakStart, false));
             }
         }
         return out;
@@ -204,8 +205,13 @@ public final class LaborCostCalculator {
         return Math.max(0, b.endMin() - b.startMin() - b.breakMinutes());
     }
 
+    /** 자정을 넘는 근무(b > 1440)는 다음 날 새벽 야간 구간까지 센다. */
     private static int nightOverlap(int a, int b) {
-        return overlap(a, b, 0, NIGHT_END) + overlap(a, b, NIGHT_START, 24 * 60);
+        int sum = 0;
+        for (int day = 0; day < b; day += Minutes.DAY) {
+            sum += overlap(a, b, day, day + NIGHT_END) + overlap(a, b, day + NIGHT_START, day + Minutes.DAY);
+        }
+        return sum;
     }
 
     private static int overlap(int a, int b, int x, int y) {

@@ -88,7 +88,8 @@ public class TemplateService {
      */
     @Transactional
     public ScheduleDto.Response applyToMonth(Long userId, Long templateId, TemplateDto.ApplyRequest req) {
-        Store store = myStore(userId);
+        Store store = storeRepository.findWithLockByUserId(userId)
+                .orElseThrow(() -> ApiException.notFound("매장 정보를 찾을 수 없습니다."));
         Template template = ownedTemplate(store, templateId);
         Body body = readBody(template);
         YearMonth month = YearMonth.from(req.getPeriodStart());
@@ -123,6 +124,7 @@ public class TemplateService {
         Store store = myStore(userId);
         Schedule schedule = scheduleRepository.findByIdAndStoreId(scheduleId, store.getId())
                 .orElseThrow(() -> ApiException.notFound("근무표를 찾을 수 없습니다."));
+        ScheduleService.requireDraft(schedule);
         Template template = ownedTemplate(store, req.getTemplateId());
         if (req.getWeekStart().getDayOfWeek() != DayOfWeek.MONDAY) {
             throw ApiException.badRequest("주 시작일은 월요일이어야 합니다.");
