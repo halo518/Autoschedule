@@ -49,7 +49,7 @@ Email + password login. `POST /api/auth/signup` and `/login` return `{id, name, 
 - Passwords are stored as BCrypt hashes (`users.password_hash`). Auth failures are `AuthException` (401); everything else uses `ApiException`.
 - Error bodies are plain Korean text (the frontend shows `res.text()` as-is), see `exception/ApiExceptionHandler` and `ValidationExceptionHandler`.
 
-Required env vars: `JWT_SECRET` (>= 32 bytes; the app won't start without it) and `SPRING_DATASOURCE_PASSWORD` if your MySQL password is not the one in `application.properties`. Optional: `COOKIE_SECURE=true` behind HTTPS, `GEMINI_API_KEY` for AI generation. `@SpringBootTest` tests need `JWT_SECRET` too. jjwt uses the `orgjson` serializer on purpose (Boot 4 ships Jackson 3).
+Required env vars: `JWT_SECRET` (>= 32 bytes; the app won't start without it) and `SPRING_DATASOURCE_PASSWORD` if your MySQL password is not the one in `application.properties`. Optional: `COOKIE_SECURE=true` behind HTTPS, `GEMINI_API_KEY` for AI generation, `CORS_ALLOWED_ORIGINS` (comma separated) when the frontend runs on another origin of the same site (cookies are `SameSite=Lax`). `GET /actuator/health` is public (status only) and is used by the compose healthcheck. `@SpringBootTest` tests need `JWT_SECRET` too. jjwt uses the `orgjson` serializer on purpose (Boot 4 ships Jackson 3).
 
 ## Store / staff API (frontend shape)
 
