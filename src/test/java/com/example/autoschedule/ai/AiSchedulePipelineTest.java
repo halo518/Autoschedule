@@ -23,6 +23,9 @@ class AiSchedulePipelineTest {
     static class FakeClient implements ScheduleAiClient {
         final Deque<String> replies;
         int calls;
+        /** fake clock in ms, advanced by callMillis per call */
+        long now;
+        long callMillis;
 
         FakeClient(String... replies) {
             this.replies = new ArrayDeque<>(List.of(replies));
@@ -31,6 +34,7 @@ class AiSchedulePipelineTest {
         @Override
         public String generate(String systemPrompt, List<Turn> turns, Map<String, Object> responseSchema) {
             calls++;
+            now += callMillis;
             return replies.size() > 1 ? replies.poll() : replies.peek();
         }
     }
@@ -44,7 +48,7 @@ class AiSchedulePipelineTest {
     }
 
     static AiSchedulePipeline pipeline(FakeClient client) {
-        return new AiSchedulePipeline(client, JsonMapper.builder().build());
+        return new AiSchedulePipeline(client, JsonMapper.builder().build(), Long.MAX_VALUE, () -> client.now);
     }
 
     @Test
@@ -83,6 +87,17 @@ class AiSchedulePipelineTest {
         assertThat(r.lines()).hasSize(1);
         assertThat(r.removedCount()).isEqualTo(1);
         assertThat(client.calls).isEqualTo(1 + AiSchedulePipeline.MAX_CORRECTIONS);
+    }
+
+    @Test
+    void stopsCorrectingWhenBudgetIsSpent() {
+        FakeClient client = new FakeClient(UNKNOWN_STAFF);
+        client.callMillis = 100_000;
+        var r = new AiSchedulePipeline(client, JsonMapper.builder().build(), 150_000, () -> client.now).run(ctx());
+        assertThat(client.calls).isEqualTo(2); // 0s -> 100s (under budget, correct once) -> 200s (stop)
+        assertThat(r.corrections()).isEqualTo(1);
+        assertThat(r.lines()).hasSize(1);
+        assertThat(r.removedCount()).isEqualTo(1);
     }
 
     @Test
