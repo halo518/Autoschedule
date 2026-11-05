@@ -7,6 +7,7 @@ import com.example.autoschedule.entity.User;
 import com.example.autoschedule.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -98,6 +99,13 @@ public class AuthService {
     @Transactional
     public void logout(String refreshToken) {
         refreshTokenRepository.deleteByTokenHash(hash(refreshToken));
+    }
+
+    /** 로그아웃하지 않고 만료된 refresh token 은 남으므로 매일 새벽에 지운다. */
+    @Scheduled(cron = "0 0 4 * * *", zone = "Asia/Seoul")
+    @Transactional
+    public void purgeExpiredRefreshTokens() {
+        refreshTokenRepository.deleteExpired(Instant.now());
     }
 
     private Tokens issue(Long userId) {
