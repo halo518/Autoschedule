@@ -34,15 +34,20 @@ public class AuthService {
     private final JwtProvider jwtProvider;
     private final PasswordEncoder passwordEncoder;
     private final Duration refreshTtl;
+    private final LoginThrottle throttle;
+    /** 없는 이메일에도 BCrypt 비교를 한 번 해서, 응답 시간으로 가입 여부가 드러나지 않게 한다. */
+    private final String dummyHash;
 
     public AuthService(UserRepository userRepository, RefreshTokenRepository refreshTokenRepository,
                        JwtProvider jwtProvider, PasswordEncoder passwordEncoder,
-                       @Value("${jwt.refresh-ttl-seconds}") long refreshTtlSeconds) {
+                       @Value("${jwt.refresh-ttl-seconds}") long refreshTtlSeconds, LoginThrottle throttle) {
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.jwtProvider = jwtProvider;
         this.passwordEncoder = passwordEncoder;
         this.refreshTtl = Duration.ofSeconds(refreshTtlSeconds);
+        this.throttle = throttle;
+        this.dummyHash = passwordEncoder.encode("dummy-password-for-timing");
     }
 
     @Transactional
@@ -66,11 +71,15 @@ public class AuthService {
 
     @Transactional
     public LoginResult login(UserDto.LoginRequest request) {
-        User user = userRepository.findByEmail(request.getEmail().trim().toLowerCase())
-                .orElseThrow(() -> new AuthException("이메일 또는 비밀번호가 맞지 않습니다."));
-        if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
+        String email = request.getEmail().trim().toLowerCase();
+        throttle.checkAllowed(email);
+        User user = userRepository.findByEmail(email).orElse(null);
+        boolean ok = passwordEncoder.matches(request.getPassword(), user == null ? dummyHash : user.getPasswordHash());
+        if (user == null || !ok) {
+            throttle.recordFailure(email);
             throw new AuthException("이메일 또는 비밀번호가 맞지 않습니다.");
         }
+        throttle.reset(email);
         return new LoginResult(UserDto.Response.from(user), issue(user.getId()));
     }
 
