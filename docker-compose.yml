@@ -30,9 +30,6 @@ services:
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env (32+ bytes)}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
-      # keep SQL and bound values (password hashes, token hashes) out of production logs
-      SPRING_JPA_SHOW_SQL: "false"
-      LOGGING_LEVEL_ORG_HIBERNATE_ORM_JDBC_BIND: INFO
 
 volumes:
   db-data:

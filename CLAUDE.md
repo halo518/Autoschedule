@@ -22,13 +22,13 @@ No lint/formatter is configured.
 
 On Linux/macOS use `./gradlew`. `settings.gradle` applies the foojay toolchain resolver, so Gradle downloads JDK 17 if it is not installed.
 
-Docker: `cp .env.example .env`, fill in `DB_PASSWORD` and `JWT_SECRET`, then `docker compose up -d --build`. The stack is MySQL 8.4 (volume `db-data`) plus the app on port `APP_PORT` (default 8080). Compose turns off SQL/bind-value logging.
+Docker: `cp .env.example .env`, fill in `DB_PASSWORD` and `JWT_SECRET`, then `docker compose up -d --build`. The stack is MySQL 8.4 (volume `db-data`) plus the app on port `APP_PORT` (default 8080).
 
 ## Runtime configuration
 
 `src/main/resources/application.properties` points at a local MySQL: `jdbc:mysql://localhost:3306/autoschedule` (timezone `Asia/Seoul`, user `root`). A MySQL instance with an `autoschedule` database must be running, otherwise the app and the `@SpringBootTest` context-load test fail at startup (the test has no DB override or embedded DB).
 
-`spring.jpa.hibernate.ddl-auto=update` means entity classes drive the schema; there are no migration scripts. SQL logging is on (`show-sql`, `format_sql`).
+`spring.jpa.hibernate.ddl-auto=update` means entity classes drive the schema; there are no migration scripts. SQL logging (`show-sql`, `format_sql`, bound values at TRACE) is only on in the `dev` profile (`application-dev.properties`, enable with `SPRING_PROFILES_ACTIVE=dev`), because bound values include password and token hashes.
 
 ### Local DB setup
 
