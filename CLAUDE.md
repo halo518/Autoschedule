@@ -26,6 +26,18 @@ No lint/formatter is configured.
 
 `spring.jpa.hibernate.ddl-auto=update` means entity classes drive the schema; there are no migration scripts. SQL logging is on (`show-sql`, `format_sql`).
 
+### Local DB setup
+
+The project was renamed from MoneyBug to autoschedule, and the DB from `moneybug` to `autoschedule`. DB contents are not in git (only `schema.sql`, which is stale relative to the entities; JPA is the source of truth). On a fresh machine, create the DB once, and the tables are created on first start:
+
+`CREATE DATABASE IF NOT EXISTS autoschedule DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`
+
+Data in the old `moneybug` DB is not migrated automatically. To carry an account over without its stores/staff, copy just the `users` row (the table is `users`, keyed by `email`):
+
+`CREATE TABLE IF NOT EXISTS autoschedule.users LIKE moneybug.users; INSERT INTO autoschedule.users SELECT * FROM moneybug.users WHERE email LIKE 'demo2%';`
+
+The default password in `application.properties` (`1234`) is a placeholder; the real root password is passed via `SPRING_DATASOURCE_PASSWORD`. The start script `~/run-moneybug.ps1` (name unchanged) prompts for that password and an optional Gemini key, sets `JWT_SECRET`, then runs `.\gradlew.bat bootRun`. Run it in its own PowerShell window. Built jars are now named `autoschedule-0.0.1-SNAPSHOT.jar`.
+
 ## Auth architecture
 
 Email + password login. `POST /api/auth/signup` and `/login` return `{id, name, email}` and set two HttpOnly cookies (`SameSite=Lax`): `access_token` (JWT, `jwt.access-ttl-seconds`) and `refresh_token` (opaque, only its SHA-256 is stored in `RefreshToken`, rotated on `POST /api/auth/refresh`). `POST /api/auth/logout` revokes the refresh token and clears both cookies. Signup logs the user in immediately.
